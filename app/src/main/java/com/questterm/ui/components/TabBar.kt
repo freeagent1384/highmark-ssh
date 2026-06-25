@@ -23,6 +23,8 @@ fun TabBar(
     onTabClose: (String) -> Unit,
     onNewTabClick: () -> Unit,
     onKeyboardToggle: () -> Unit,
+    onFontDecrease: () -> Unit,
+    onFontIncrease: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -72,6 +74,31 @@ fun TabBar(
                         modifier = Modifier.size(24.dp),
                     )
                 },
+            )
+        }
+
+        // Font size controls. Pinch-to-zoom can't reach a 2D panel app on the
+        // Quest (no multitouch), so these buttons are the only way to resize.
+        IconButton(
+            onClick = onFontDecrease,
+            modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+            Text(
+                text = "A−",
+                fontSize = 16.sp,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        IconButton(
+            onClick = onFontIncrease,
+            modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+            Text(
+                text = "A+",
+                fontSize = 22.sp,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
 

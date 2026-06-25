@@ -1,6 +1,7 @@
 package com.questterm.session
 
 import android.util.Log
+import com.questterm.data.TerminalSettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,10 +15,19 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class SessionManager @Inject constructor() {
+class SessionManager @Inject constructor(
+    private val settingsStore: TerminalSettingsStore,
+) {
 
     private val _tabs = MutableStateFlow<List<TabSession>>(emptyList())
     val tabs: StateFlow<List<TabSession>> = _tabs.asStateFlow()
+
+    /** Current terminal font size (in pixels), persisted across sessions. */
+    val fontSize: StateFlow<Int> = settingsStore.fontSize
+
+    fun increaseFontSize() = settingsStore.increaseFontSize()
+
+    fun decreaseFontSize() = settingsStore.decreaseFontSize()
 
     private val _activeTabId = MutableStateFlow<String?>(null)
     val activeTabId: StateFlow<String?> = _activeTabId.asStateFlow()

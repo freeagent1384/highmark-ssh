@@ -86,6 +86,8 @@ fun TerminalHostScreen(
                         keyboardShowing = !keyboardShowing
                     }
                 },
+                onFontDecrease = { sessionManager.decreaseFontSize() },
+                onFontIncrease = { sessionManager.increaseFontSize() },
             )
         }
 
