@@ -5,6 +5,14 @@ All notable changes to Highmark SSH will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-06-24
+
+### Added
+- Adjustable terminal font size with A−/A+ controls in the tab bar
+  - Size persists across sessions and applies to all tabs
+  - Reflows the terminal grid and notifies the remote shell on change
+  - Needed on Quest, where the OS provides no usable pinch-to-zoom for 2D panel apps
+
 ## [1.0.0] - 2026-02-07
 
 ### Added
