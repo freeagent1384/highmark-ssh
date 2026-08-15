@@ -201,6 +201,9 @@ This project uses a dual-license approach:
 
 - **Custom Code** (Highmark SSH-specific): MIT License
 - **Termux Terminal Emulator Integration**: GPL v3
+- **Names, logos, icons and artwork**: not open source — all rights reserved
+
+The code is yours to build on. The branding is not: "Rabbit Hole Solutions" and its logo are trademarks with a registration application pending, "Highmark SSH" and its logo are unregistered trademarks, and the icon, logo and artwork files in this repository are excluded from the MIT grant. They ship here so the project builds, not as a licence to reuse them.
 
 See [LICENSE](LICENSE) for full details. When using or modifying this project, please respect both licenses.
 

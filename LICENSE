@@ -42,9 +42,29 @@ See: https://github.com/termux/termux-app/blob/master/LICENSE
 - **Gson** (Apache License 2.0): https://github.com/google/gson
 - **Android Jetpack Libraries** (Apache License 2.0): https://developer.android.com/jetpack
 
-## Trademarks
+## Trademarks and Brand Assets
 
-The "Highmark SSH" name and the Highmark SSH rabbit logo are trademarks of Rabbit Hole Solutions Inc. These trademarks are not licensed under the MIT, GPL, or any other open source license. You may not use the Highmark SSH name or logo in derivative works, forks, or distributions without prior written permission from Rabbit Hole Solutions Inc.
+### Trademarks
+
+"Rabbit Hole Solutions" and the Rabbit Hole Solutions rabbit logo are trademarks of Rabbit Hole Solutions Inc., and are the subject of a pending trademark registration application.
+
+"Highmark SSH" and the Highmark SSH logo are unregistered trademarks of Rabbit Hole Solutions Inc.
+
+None of these marks are licensed under the MIT, GPL, or any other open source license — an open source copyright license grants no trademark rights. You may not use them in derivative works, forks, or distributions without prior written permission from Rabbit Hole Solutions Inc.
+
+### Brand and marketing assets
+
+Non-code brand assets in this repository are **excluded from the MIT license above** and all rights are reserved. This includes:
+
+- Application launcher icons (`app/src/main/res/mipmap-*/ic_launcher.png`)
+- Logo image files (`app/src/main/res/drawable/logo_*.png`)
+- Store artwork, screenshots, and promotional imagery
+
+These files are present so the project builds and documents itself, not as an open source grant. They are not "associated documentation files" within the meaning of the MIT license above.
+
+### In plain terms
+
+Building this project and running your own version of it is fine, and is why the source is here. Shipping it under our name, or with our artwork, is not.
 
 ---
 
