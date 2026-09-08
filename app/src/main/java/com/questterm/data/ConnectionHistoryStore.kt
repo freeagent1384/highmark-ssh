@@ -53,6 +53,14 @@ class ConnectionHistoryStore @Inject constructor(
         return ids.mapNotNull { id ->
             prefs.getString("$PREFIX_PROFILE$id", null)?.let {
                 gson.fromJson(it, ConnectionProfile::class.java)
+            }?.let { profile ->
+                // Profiles saved before key-auth support was added have no `authMethod`
+                // in their stored JSON. ConnectionProfile has required constructor params,
+                // so Gson deserializes it via unsafe field injection rather than the
+                // constructor, leaving such gaps as a raw null despite the non-null Kotlin
+                // type — normalize that back to the intended default.
+                @Suppress("SENSELESS_COMPARISON")
+                if (profile.authMethod == null) profile.copy(authMethod = AuthMethod.PASSWORD) else profile
             }
         }.sortedWith(
             compareByDescending<ConnectionProfile> { it.isFavorite }
@@ -72,19 +80,22 @@ class ConnectionHistoryStore @Inject constructor(
             it.host == profile.host && it.port == profile.port && it.username == profile.username
         }
 
-        val toSave = if (existing != null) {
-            // Update existing: preserve favorite status, update timestamp, update password if requested
-            existing.copy(
-                encryptedPassword = if (rememberPassword) profile.encryptedPassword else null,
-                lastUsedTimestamp = System.currentTimeMillis()
-            )
-        } else {
-            // New profile
-            profile.copy(
-                encryptedPassword = if (rememberPassword) profile.encryptedPassword else null,
-                isFavorite = false
-            )
-        }
+        // Key auth is always persisted (the key was generated specifically to be
+        // installed on the server, so there's no "don't remember" case for it);
+        // password auth is gated by the remember-password toggle.
+        val persistPassword = profile.authMethod == AuthMethod.PASSWORD && rememberPassword
+        val persistKey = profile.authMethod == AuthMethod.KEY
+
+        // Base on the existing profile when updating (preserves id/favorite status),
+        // otherwise on the freshly-built profile. Auth fields always come from the
+        // incoming profile so switching auth methods clears out the stale one.
+        val toSave = (existing ?: profile).copy(
+            authMethod = profile.authMethod,
+            encryptedPassword = if (persistPassword) profile.encryptedPassword else null,
+            encryptedPrivateKey = if (persistKey) profile.encryptedPrivateKey else null,
+            publicKeyRaw = if (persistKey) profile.publicKeyRaw else null,
+            lastUsedTimestamp = System.currentTimeMillis(),
+        )
 
         // Save profile
         val ids = prefs.getStringSet(KEY_PROFILE_IDS, emptySet())?.toMutableSet() ?: mutableSetOf()
