@@ -291,13 +291,60 @@ public final class TerminalView extends View {
 
         return new BaseInputConnection(this, true) {
 
+            // Text from the current composing region that has already been
+            // echoed to the terminal (see setComposingText()). Some IMEs,
+            // notably the Meta Quest system keyboard, never call commitText()
+            // per character and only settle the composing region much later
+            // (e.g. on Enter), so without this a whole line of typed text
+            // would sit invisible until then.
+            final StringBuilder mEchoedComposingText = new StringBuilder();
+
+            // Sends only the delta between what was previously echoed for the
+            // composing region and newText: backspaces the part that no
+            // longer matches, then types the new suffix.
+            void echoComposingDiff(String newText) {
+                String oldText = mEchoedComposingText.toString();
+                int common = 0;
+                int minLen = Math.min(oldText.length(), newText.length());
+                while (common < minLen && oldText.charAt(common) == newText.charAt(common)) common++;
+
+                // Dispatch straight through the base implementation (not our own
+                // sendKeyEvent() override below) since at this point getEditable()
+                // already holds the *new* composing text (super.setComposingText()
+                // put it there) — routing through our override would misread that
+                // as pending plain text and flush it verbatim to the terminal.
+                KeyEvent deleteKey = new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL);
+                for (int i = oldText.length(); i > common; i--) super.sendKeyEvent(deleteKey);
+
+                if (common < newText.length()) sendTextToTerminal(newText.substring(common));
+
+                mEchoedComposingText.setLength(0);
+                mEchoedComposingText.append(newText);
+            }
+
+            @Override
+            public boolean setComposingText(CharSequence text, int newCursorPosition) {
+                if (TERMINAL_VIEW_KEY_LOGGING_ENABLED) {
+                    mClient.logInfo(LOG_TAG, "IME: setComposingText(\"" + text + "\", " + newCursorPosition + ")");
+                }
+                super.setComposingText(text, newCursorPosition);
+                getEditable().clear();
+
+                if (mEmulator == null) return true;
+
+                echoComposingDiff(text.toString());
+                return true;
+            }
+
             @Override
             public boolean finishComposingText() {
                 if (TERMINAL_VIEW_KEY_LOGGING_ENABLED) mClient.logInfo(LOG_TAG, "IME: finishComposingText()");
                 super.finishComposingText();
-
-                sendTextToTerminal(getEditable());
                 getEditable().clear();
+
+                // Anything still pending has already been echoed as it was
+                // composed above; this only clears our tracking.
+                echoComposingDiff("");
                 return true;
             }
 
@@ -307,12 +354,16 @@ public final class TerminalView extends View {
                     mClient.logInfo(LOG_TAG, "IME: commitText(\"" + text + "\", " + newCursorPosition + ")");
                 }
                 super.commitText(text, newCursorPosition);
+                getEditable().clear();
 
                 if (mEmulator == null) return true;
 
-                Editable content = getEditable();
-                sendTextToTerminal(content);
-                content.clear();
+                // The committed text may just be finalizing what setComposingText()
+                // already echoed (e.g. tapping a word) or may be entirely new
+                // (e.g. autofill/paste); diff against what's already on screen
+                // either way, then the composing region is done.
+                echoComposingDiff(text.toString());
+                mEchoedComposingText.setLength(0);
                 return true;
             }
 
@@ -323,6 +374,10 @@ public final class TerminalView extends View {
                 // before committing composed text, causing "ll<Enter>" to arrive as
                 // <Enter> then "ll".
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    // Composing text has already been echoed character-by-character
+                    // above; a key event (e.g. Enter) ends that composing region, so
+                    // just reset the tracking for the next word.
+                    mEchoedComposingText.setLength(0);
                     Editable content = getEditable();
                     if (content.length() > 0) {
                         sendTextToTerminal(content);
@@ -337,6 +392,7 @@ public final class TerminalView extends View {
             public boolean performEditorAction(int actionCode) {
                 // When the IME submit button is pressed, flush composing text first,
                 // then send Enter (carriage return) to the terminal.
+                mEchoedComposingText.setLength(0);
                 Editable content = getEditable();
                 if (content.length() > 0) {
                     sendTextToTerminal(content);

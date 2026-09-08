@@ -49,7 +49,7 @@ class QuestTermViewClient(
 
     override fun shouldBackButtonBeMappedToEscape(): Boolean = false
 
-    override fun shouldEnforceCharBasedInput(): Boolean = false
+    override fun shouldEnforceCharBasedInput(): Boolean = true
 
     override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
 

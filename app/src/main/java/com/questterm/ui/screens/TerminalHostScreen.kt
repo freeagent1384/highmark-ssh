@@ -32,7 +32,7 @@ fun TerminalHostScreen(
 
     val context = LocalContext.current
     var showConnectDialog by remember { mutableStateOf(tabs.isEmpty()) }
-    var keyboardShowing by remember { mutableStateOf(true) }
+    var keyboardShowing by remember { mutableStateOf(false) }
 
     // Auto-show dialog when no tabs exist
     LaunchedEffect(tabs.isEmpty()) {
