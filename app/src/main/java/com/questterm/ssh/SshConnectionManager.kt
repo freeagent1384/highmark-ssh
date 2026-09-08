@@ -12,8 +12,8 @@ class SshConnectionManager @Inject constructor(
         host: String,
         port: Int,
         username: String,
-        password: String,
+        auth: SshAuth,
     ): SshSession {
-        return SshSession(host, port, username, password)
+        return SshSession(host, port, username, auth)
     }
 }
