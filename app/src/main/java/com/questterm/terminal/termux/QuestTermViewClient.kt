@@ -94,7 +94,15 @@ class QuestTermViewClient(
         clipboard.setPrimaryClip(ClipData.newPlainText("Highmark SSH", text))
     }
 
-    override fun onPasteTextFromClipboard(session: TerminalSession?) {}
+    override fun onPasteTextFromClipboard(session: TerminalSession?) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clipData = clipboard.primaryClip ?: return
+        if (clipData.itemCount == 0) return
+        val pasteText = clipData.getItemAt(0).coerceToText(context)
+        if (!pasteText.isNullOrEmpty()) {
+            terminalView?.mEmulator?.paste(pasteText.toString())
+        }
+    }
 
     override fun onBell(session: TerminalSession?) {}
 
