@@ -299,6 +299,14 @@ public final class TerminalView extends View {
             // would sit invisible until then.
             final StringBuilder mEchoedComposingText = new StringBuilder();
 
+            // Set by sendKeyEvent()/performEditorAction() when a key event (e.g.
+            // Enter) has to flush the composing text early because the IME hasn't
+            // committed it yet — holds the text that was already sent so a late
+            // commitText()/finishComposingText() call for that same composing
+            // session (which the Quest keyboard sends *after* the key event) can
+            // be recognized as redundant instead of being echoed a second time.
+            String mPendingKeyEventFlush = null;
+
             // Sends only the delta between what was previously echoed for the
             // composing region and newText: backspaces the part that no
             // longer matches, then types the new suffix.
@@ -332,6 +340,10 @@ public final class TerminalView extends View {
 
                 if (mEmulator == null) return true;
 
+                // A new composing session (e.g. the next word) is unrelated to
+                // any text a key event already flushed; don't let a late,
+                // still-pending commit for the old session suppress this one.
+                mPendingKeyEventFlush = null;
                 echoComposingDiff(text.toString());
                 return true;
             }
@@ -341,6 +353,15 @@ public final class TerminalView extends View {
                 if (TERMINAL_VIEW_KEY_LOGGING_ENABLED) mClient.logInfo(LOG_TAG, "IME: finishComposingText()");
                 super.finishComposingText();
                 getEditable().clear();
+
+                if (mPendingKeyEventFlush != null) {
+                    // This is just the IME belatedly closing out a composing
+                    // session that a key event already flushed to the terminal;
+                    // there's nothing new to send.
+                    mPendingKeyEventFlush = null;
+                    mEchoedComposingText.setLength(0);
+                    return true;
+                }
 
                 // Anything still pending has already been echoed as it was
                 // composed above; this only clears our tracking.
@@ -358,10 +379,23 @@ public final class TerminalView extends View {
 
                 if (mEmulator == null) return true;
 
+                if (mPendingKeyEventFlush != null && text.toString().equals(mPendingKeyEventFlush)) {
+                    // The Quest keyboard sends Enter before committing the word it
+                    // ends — that text was already echoed character-by-character
+                    // and flushed by sendKeyEvent()/performEditorAction() below.
+                    // This commitText() call is just that same text arriving late;
+                    // sending it again would duplicate it after the command has
+                    // already run (e.g. "pwd" reappearing at the next prompt).
+                    mPendingKeyEventFlush = null;
+                    mEchoedComposingText.setLength(0);
+                    return true;
+                }
+
                 // The committed text may just be finalizing what setComposingText()
                 // already echoed (e.g. tapping a word) or may be entirely new
                 // (e.g. autofill/paste); diff against what's already on screen
                 // either way, then the composing region is done.
+                mPendingKeyEventFlush = null;
                 echoComposingDiff(text.toString());
                 mEchoedComposingText.setLength(0);
                 return true;
@@ -376,7 +410,12 @@ public final class TerminalView extends View {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     // Composing text has already been echoed character-by-character
                     // above; a key event (e.g. Enter) ends that composing region, so
-                    // just reset the tracking for the next word.
+                    // just reset the tracking for the next word. Remember what was
+                    // sent so a late commitText()/finishComposingText() for this
+                    // same session (see above) doesn't echo it a second time.
+                    if (mEchoedComposingText.length() > 0) {
+                        mPendingKeyEventFlush = mEchoedComposingText.toString();
+                    }
                     mEchoedComposingText.setLength(0);
                     Editable content = getEditable();
                     if (content.length() > 0) {
@@ -392,6 +431,9 @@ public final class TerminalView extends View {
             public boolean performEditorAction(int actionCode) {
                 // When the IME submit button is pressed, flush composing text first,
                 // then send Enter (carriage return) to the terminal.
+                if (mEchoedComposingText.length() > 0) {
+                    mPendingKeyEventFlush = mEchoedComposingText.toString();
+                }
                 mEchoedComposingText.setLength(0);
                 Editable content = getEditable();
                 if (content.length() > 0) {
