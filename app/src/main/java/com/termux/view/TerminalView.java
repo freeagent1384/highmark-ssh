@@ -28,6 +28,7 @@ import android.view.autofill.AutofillValue;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Scroller;
 
 import java.util.Arrays;
@@ -905,6 +906,19 @@ public final class TerminalView extends View {
         // https://github.com/termux/termux-app/issues/731
         if (!event.isFunctionPressed() && handleKeyCode(keyCode, keyMod)) {
             if (TERMINAL_VIEW_KEY_LOGGING_ENABLED) mClient.logInfo(LOG_TAG, "handleKeyCode() took key event");
+            if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+                // Enter here was written straight to the session above, bypassing the
+                // InputConnection entirely — some IMEs (notably the Meta Quest system
+                // keyboard) dispatch it as a hardware key event rather than through
+                // sendKeyEvent()/performEditorAction(). Nothing in that path tells the
+                // IME that the field's content is now gone, so it can otherwise treat
+                // the next keystroke as a continuation of the line just submitted and
+                // prepend its own stale buffer to it (e.g. "echo foo" + "e" typed at the
+                // new prompt arrives as setComposingText("echo fooe")). Restarting the
+                // input connection forces the IME to drop that stale state.
+                InputMethodManager imm = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) imm.restartInput(this);
+            }
             return true;
         }
 
