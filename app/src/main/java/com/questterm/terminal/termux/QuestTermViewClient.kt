@@ -38,11 +38,17 @@ class QuestTermViewClient(
 
     override fun onSingleTapUp(e: MotionEvent) {
         terminalView?.let { view ->
+            val alreadyFocused = view.hasFocus()
             view.requestFocus()
             val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-            // Restart input to rebuild the InputConnection, then show keyboard
-            // This ensures the keyboard always connects directly to the terminal
-            imm.restartInput(view)
+            // Restart input to rebuild the InputConnection, then show keyboard.
+            // This ensures the keyboard always connects directly to the terminal.
+            // Skip the restart if the view was already focused: tearing down and
+            // rebuilding the InputConnection here would discard its composing-text
+            // tracking, which can otherwise orphan an in-flight composing session.
+            if (!alreadyFocused) {
+                imm.restartInput(view)
+            }
             view.post { imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT) }
         }
     }

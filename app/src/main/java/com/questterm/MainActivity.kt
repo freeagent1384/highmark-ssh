@@ -56,10 +56,16 @@ class MainActivity : ComponentActivity() {
      */
     private fun refocusTerminal() {
         findTerminalView(window.decorView)?.let { tv ->
+            val alreadyFocused = tv.hasFocus()
             tv.requestFocus()
-            tv.post {
-                val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-                imm.restartInput(tv)
+            // Skip the restart if the view was already focused: tearing down and
+            // rebuilding the InputConnection here would discard its composing-text
+            // tracking, which can otherwise orphan an in-flight composing session.
+            if (!alreadyFocused) {
+                tv.post {
+                    val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+                    imm.restartInput(tv)
+                }
             }
         }
     }
