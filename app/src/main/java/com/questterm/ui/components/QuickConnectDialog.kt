@@ -373,20 +373,8 @@ private fun GeneratedKeyPanel(
             "Add this public key to the server's ~/.ssh/authorized_keys:",
             style = MaterialTheme.typography.bodySmall,
         )
-        Surface(
-            shape = MaterialTheme.shapes.small,
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            SelectionContainer {
-                Text(
-                    text = publicKey ?: "Generating…",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.padding(8.dp),
-                )
-            }
-        }
+        // Buttons above the key: the long key line pushes anything below it out of
+        // the scrollable form's visible area on Quest.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -426,7 +414,21 @@ private fun GeneratedKeyPanel(
                 onClick = onRegenerate,
                 modifier = Modifier.weight(1f),
             ) {
-                Text("Regenerate")
+                Text("Regen")
+            }
+        }
+        Surface(
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            SelectionContainer {
+                Text(
+                    text = publicKey ?: "Generating…",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(8.dp),
+                )
             }
         }
     }
