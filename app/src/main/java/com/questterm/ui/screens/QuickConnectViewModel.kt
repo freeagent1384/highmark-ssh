@@ -216,11 +216,11 @@ class QuickConnectViewModel @Inject constructor(
     }
 
     /**
-     * Called when the user copies the public key to install it on the server.
-     * Save now so the key survives the dialog closing or the app restarting
-     * while they do that.
+     * Called when the user copies or shares the public key to install it on the
+     * server. Save now so the key survives the dialog closing or the app
+     * restarting while they do that.
      */
-    fun onPublicKeyCopied() {
+    fun onPublicKeyExported() {
         pendingKeyPair?.let { saveKeyProfile(it) }
     }
 

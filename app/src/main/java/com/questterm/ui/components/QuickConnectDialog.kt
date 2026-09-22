@@ -1,5 +1,6 @@
 package com.questterm.ui.components
 
+import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
@@ -212,7 +214,7 @@ fun QuickConnectDialog(
                     GeneratedKeyPanel(
                         publicKey = uiState.generatedPublicKey,
                         onRegenerate = viewModel::regenerateKey,
-                        onCopied = viewModel::onPublicKeyCopied,
+                        onExported = viewModel::onPublicKeyExported,
                     )
                 }
 
@@ -359,9 +361,10 @@ private fun HostKeyDialog(
 private fun GeneratedKeyPanel(
     publicKey: String?,
     onRegenerate: () -> Unit,
-    onCopied: () -> Unit,
+    onExported: () -> Unit,
 ) {
     val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -392,13 +395,32 @@ private fun GeneratedKeyPanel(
                 onClick = {
                     publicKey?.let {
                         clipboardManager.setText(AnnotatedString(it))
-                        onCopied()
+                        onExported()
                     }
                 },
                 enabled = publicKey != null,
                 modifier = Modifier.weight(1f),
             ) {
                 Text("Copy")
+            }
+            OutlinedButton(
+                onClick = {
+                    publicKey?.let {
+                        onExported()
+                        // Hand off to the system share sheet; the OS lists whatever
+                        // installed apps accept text.
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, "Highmark SSH public key")
+                            putExtra(Intent.EXTRA_TEXT, it)
+                        }
+                        context.startActivity(Intent.createChooser(send, "Share public key"))
+                    }
+                },
+                enabled = publicKey != null,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Share")
             }
             OutlinedButton(
                 onClick = onRegenerate,
