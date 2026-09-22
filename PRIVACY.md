@@ -2,7 +2,7 @@
 
 **Highmark SSH**
 Rabbit Hole Solutions Inc.
-Last Updated: February 17, 2026
+Last Updated: September 22, 2026
 
 ## Overview
 
@@ -24,9 +24,14 @@ Highmark SSH stores the following data **locally on your device only**:
 
 - **Connection history** — Hostnames, ports, and usernames of servers you connect to, saved for convenience
 - **Saved passwords** — Encrypted using AES-256-GCM with keys stored in the Android Keystore (hardware-backed on Quest). Passwords are only stored if you explicitly choose "Remember password"
+- **SSH keys** — If you use key authentication, the app generates an Ed25519 key pair on your device. The private key is encrypted the same way as saved passwords and never leaves your device. The public key is stored alongside it
 - **Host key fingerprints** — SSH server public key fingerprints for Trust-on-First-Use (TOFU) verification
 
-This data never leaves your device and is not accessible to Rabbit Hole Solutions Inc. or any third party.
+This data never leaves your device and is not accessible to Rabbit Hole Solutions Inc. or any third party, with one exception you control: when you tap **Copy** or **Share** on an SSH public key, that public key is placed on the clipboard or handed to the app you pick from the system share sheet, so you can install it on your server. A public key is not secret and cannot be used to access your servers. Your private key is never copied or shared.
+
+## Clipboard
+
+Highmark SSH writes to the clipboard only when you copy terminal text or a public key, and reads from it only when you choose **Paste**.
 
 ## Network Activity
 

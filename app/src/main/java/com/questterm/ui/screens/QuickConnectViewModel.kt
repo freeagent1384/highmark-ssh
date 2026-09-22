@@ -3,15 +3,19 @@ package com.questterm.ui.screens
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.questterm.data.AuthMethod
 import com.questterm.data.ConnectionHistoryStore
 import com.questterm.data.ConnectionProfile
 import com.questterm.session.SessionManager
 import com.questterm.ssh.ConnectionCache
 import com.questterm.ssh.KnownHostsStore
+import com.questterm.ssh.SshAuth
 import com.questterm.ssh.SshConnectionManager
+import com.questterm.ssh.SshKeyPairs
 import com.questterm.terminal.termux.QuestTermViewClient
 import com.questterm.terminal.termux.SshTerminalSession
 import com.trilead.ssh2.ServerHostKeyVerifier
+import com.trilead.ssh2.crypto.keys.Ed25519PublicKey
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
@@ -20,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.security.KeyPair
 import javax.inject.Inject
 
 data class QuickConnectUiState(
@@ -32,6 +37,9 @@ data class QuickConnectUiState(
     val hostKeyPrompt: HostKeyPrompt? = null,
     val savedProfiles: List<ConnectionProfile> = emptyList(),
     val rememberPassword: Boolean = false,
+    val authMethod: AuthMethod = AuthMethod.PASSWORD,
+    /** The "ssh-ed25519 AAAA... comment" line for the currently generated key, if any. */
+    val generatedPublicKey: String? = null,
 )
 
 /** Shown when the user needs to accept or reject a host key. */
@@ -58,6 +66,26 @@ class QuickConnectViewModel @Inject constructor(
 
     /** Set by the verifier on the IO thread, completed by the UI when user responds. */
     private var hostKeyResponse: CompletableDeferred<Boolean>? = null
+
+    /** The keypair backing generatedPublicKey/authMethod == KEY. Not exposed via state
+     *  since KeyPair isn't a plain data value; kept alongside it here instead. */
+    private var pendingKeyPair: KeyPair? = null
+
+    /** The host/port/username [pendingKeyPair] belongs to; a key is per-connection. */
+    private var pendingKeyTarget: KeyTarget? = null
+
+    private data class KeyTarget(val host: String, val port: Int, val username: String)
+
+    private fun currentTarget(): KeyTarget {
+        val state = _uiState.value
+        return KeyTarget(state.host, state.port.toIntOrNull() ?: 22, state.username)
+    }
+
+    private fun setPendingKey(keyPair: KeyPair?, publicKey: String?) {
+        pendingKeyPair = keyPair
+        pendingKeyTarget = keyPair?.let { currentTarget() }
+        _uiState.update { it.copy(generatedPublicKey = publicKey) }
+    }
 
     private val knownHosts: KnownHostsStore
         get() = sshConnectionManager.knownHostsStore
@@ -118,14 +146,51 @@ class QuickConnectViewModel @Inject constructor(
         }
 
         _uiState.value = _uiState.value.copy(host = host, username = username, port = port)
+        onTargetChanged()
     }
 
     fun updatePort(value: String) {
         _uiState.value = _uiState.value.copy(port = value)
+        onTargetChanged()
     }
 
     fun updateUsername(value: String) {
         _uiState.value = _uiState.value.copy(username = value)
+        onTargetChanged()
+    }
+
+    /** Drops a key that belonged to a different host/port/username. */
+    private fun onTargetChanged() {
+        if (pendingKeyTarget == currentTarget()) return
+        if (_uiState.value.authMethod == AuthMethod.KEY) {
+            resolveKeyForTarget()
+        } else {
+            setPendingKey(null, null)
+        }
+    }
+
+    /**
+     * Shows the key saved for the current host/port/username, or a fresh unsaved
+     * one. Reusing matters: generating over a saved key would replace the key
+     * already installed on the server.
+     */
+    private fun resolveKeyForTarget() {
+        val saved = findSavedProfile()
+        val savedKey = saved?.getKeyPair()
+        if (savedKey != null) {
+            setPendingKey(savedKey, saved.getOpenSshPublicKey())
+        } else {
+            // Not saved yet: the host may still be half-typed. It's saved when the
+            // user copies it, regenerates, or connects.
+            val keyPair = SshKeyPairs.generate()
+            setPendingKey(keyPair, formatPublicKey(keyPair))
+        }
+    }
+
+    private fun formatPublicKey(keyPair: KeyPair): String? {
+        val state = _uiState.value
+        val comment = state.username.ifBlank { "quest" } + "@" + state.host.ifBlank { "highmark-ssh" }
+        return SshKeyPairs.formatOpenSsh(keyPair.public as Ed25519PublicKey, comment)
     }
 
     fun updatePassword(value: String) {
@@ -136,16 +201,70 @@ class QuickConnectViewModel @Inject constructor(
         _uiState.update { it.copy(rememberPassword = !it.rememberPassword) }
     }
 
+    fun selectAuthMethod(method: AuthMethod) {
+        _uiState.update { it.copy(authMethod = method) }
+        if (method == AuthMethod.KEY && (pendingKeyPair == null || pendingKeyTarget != currentTarget())) {
+            resolveKeyForTarget()
+        }
+    }
+
+    /** Explicitly replaces this connection's key with a fresh one, and saves it. */
+    fun regenerateKey() {
+        val keyPair = SshKeyPairs.generate()
+        setPendingKey(keyPair, formatPublicKey(keyPair))
+        saveKeyProfile(keyPair)
+    }
+
+    /**
+     * Called when the user copies or shares the public key to install it on the
+     * server. Save now so the key survives the dialog closing or the app
+     * restarting while they do that.
+     */
+    fun onPublicKeyExported() {
+        pendingKeyPair?.let { saveKeyProfile(it) }
+    }
+
+    private fun findSavedProfile(): ConnectionProfile? {
+        val state = _uiState.value
+        val port = state.port.toIntOrNull() ?: 22
+        return connectionHistory.getAllProfiles().find {
+            it.host == state.host && it.port == port && it.username == state.username
+        }
+    }
+
+    /** Saves [keyPair] against the current host/port/username, if they're filled in. */
+    private fun saveKeyProfile(keyPair: KeyPair) {
+        val state = _uiState.value
+        if (state.host.isBlank() || state.username.isBlank()) return
+        val profile = ConnectionProfile(
+            host = state.host,
+            port = state.port.toIntOrNull() ?: 22,
+            username = state.username,
+        ).withGeneratedKey(keyPair)
+        connectionHistory.saveProfile(profile, rememberPassword = state.rememberPassword)
+        loadSavedProfiles()
+    }
+
     fun selectProfile(profile: ConnectionProfile) {
+        // Load both credentials; the profile keeps each independently, so the user
+        // can switch methods without losing either.
+        val profileKey = profile.getKeyPair()
         _uiState.update {
             it.copy(
                 host = profile.host,
                 port = profile.port.toString(),
                 username = profile.username,
                 password = profile.getDecryptedPassword() ?: "",
-                rememberPassword = profile.encryptedPassword != null
+                rememberPassword = profile.encryptedPassword != null,
+                authMethod = profile.authMethod,
+                // Only show the public key if its private half actually decrypted
+                // (e.g. not after a Keystore reset), so the UI matches what connect() can use.
+                generatedPublicKey = if (profileKey != null) profile.getOpenSshPublicKey() else null,
             )
         }
+        // Set after the fields above so the key is bound to this profile's target.
+        pendingKeyPair = profileKey
+        pendingKeyTarget = profileKey?.let { currentTarget() }
     }
 
     fun toggleFavorite(profileId: String) {
@@ -174,16 +293,30 @@ class QuickConnectViewModel @Inject constructor(
             _uiState.value = state.copy(error = "Host and username are required")
             return
         }
+        val keyPair = pendingKeyPair
+        if (state.authMethod == AuthMethod.KEY && keyPair == null) {
+            _uiState.value = state.copy(error = "Generate a key first")
+            return
+        }
 
         val port = state.port.toIntOrNull() ?: 22
 
         _uiState.value = state.copy(isConnecting = true, error = null)
 
+        // Make sure the key is on disk before the first attempt, which may well fail
+        // while the user is still installing it on the server.
+        if (state.authMethod == AuthMethod.KEY) saveKeyProfile(keyPair!!)
+
+        val auth = when (state.authMethod) {
+            AuthMethod.PASSWORD -> SshAuth.Password(state.password)
+            AuthMethod.KEY -> SshAuth.PrivateKey(keyPair!!)
+        }
+
         val sshSession = sshConnectionManager.createSession(
             host = state.host,
             port = port,
             username = state.username,
-            password = state.password,
+            auth = auth,
         )
 
         // Host key verifier: TOFU with user confirmation
@@ -221,7 +354,9 @@ class QuickConnectViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 terminalSession.connect(hostKeyVerifier = verifier)
-                connectionCache.save(state.host, state.port.ifBlank { "22" }, state.username, state.password)
+                if (state.authMethod == AuthMethod.PASSWORD) {
+                    connectionCache.save(state.host, state.port.ifBlank { "22" }, state.username, state.password)
+                }
                 val label = "${state.username}@${state.host}"
                 sessionManager.addTab(label, sshSession, terminalSession, viewClient)
 
@@ -230,7 +365,12 @@ class QuickConnectViewModel @Inject constructor(
                     host = state.host,
                     port = port,
                     username = state.username,
-                ).let { if (state.rememberPassword) it.withPassword(state.password) else it }
+                ).let {
+                    when (state.authMethod) {
+                        AuthMethod.PASSWORD -> if (state.rememberPassword) it.withPassword(state.password) else it
+                        AuthMethod.KEY -> it.withGeneratedKey(keyPair!!)
+                    }
+                }
                 connectionHistory.saveProfile(profile, rememberPassword = state.rememberPassword)
                 loadSavedProfiles()
 

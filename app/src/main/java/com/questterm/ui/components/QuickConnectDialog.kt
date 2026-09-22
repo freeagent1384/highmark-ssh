@@ -1,12 +1,15 @@
 package com.questterm.ui.components
 
+import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
@@ -17,7 +20,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -28,6 +34,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.questterm.R
+import com.questterm.data.AuthMethod
 import com.questterm.data.ConnectionProfile
 import com.questterm.ui.screens.HostKeyPrompt
 import com.questterm.ui.screens.QuickConnectViewModel
@@ -111,6 +118,14 @@ fun QuickConnectDialog(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
                     Text(
                         text = "Quick Connect",
                         style = MaterialTheme.typography.titleLarge,
@@ -152,18 +167,56 @@ fun QuickConnectDialog(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 )
 
-                OutlinedTextField(
-                    value = uiState.password,
-                    onValueChange = viewModel::updatePassword,
-                    label = { Text("Password") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(
-                        onDone = { viewModel.connect(onConnected) },
-                    ),
-                )
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    SegmentedButton(
+                        selected = uiState.authMethod == AuthMethod.PASSWORD,
+                        onClick = { viewModel.selectAuthMethod(AuthMethod.PASSWORD) },
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    ) {
+                        Text("Password")
+                    }
+                    SegmentedButton(
+                        selected = uiState.authMethod == AuthMethod.KEY,
+                        onClick = { viewModel.selectAuthMethod(AuthMethod.KEY) },
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    ) {
+                        Text("Key")
+                    }
+                }
+
+                if (uiState.authMethod == AuthMethod.PASSWORD) {
+                    OutlinedTextField(
+                        value = uiState.password,
+                        onValueChange = viewModel::updatePassword,
+                        label = { Text("Password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(
+                            onDone = { viewModel.connect(onConnected) },
+                        ),
+                    )
+
+                    // Remember password checkbox
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = uiState.rememberPassword,
+                            onCheckedChange = { viewModel.toggleRememberPassword() }
+                        )
+                        Text("Remember password", style = MaterialTheme.typography.bodyMedium)
+                    }
+                } else {
+                    GeneratedKeyPanel(
+                        publicKey = uiState.generatedPublicKey,
+                        onRegenerate = viewModel::regenerateKey,
+                        onExported = viewModel::onPublicKeyExported,
+                    )
+                }
 
                 if (uiState.error != null) {
                     Text(
@@ -172,19 +225,7 @@ fun QuickConnectDialog(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-
-                // Remember password checkbox
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = uiState.rememberPassword,
-                        onCheckedChange = { viewModel.toggleRememberPassword() }
-                    )
-                    Text("Remember password", style = MaterialTheme.typography.bodyMedium)
-                }
+                    }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -317,6 +358,83 @@ private fun HostKeyDialog(
 }
 
 @Composable
+private fun GeneratedKeyPanel(
+    publicKey: String?,
+    onRegenerate: () -> Unit,
+    onExported: () -> Unit,
+) {
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            "Add this public key to the server's ~/.ssh/authorized_keys:",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        // Buttons above the key: the long key line pushes anything below it out of
+        // the scrollable form's visible area on Quest.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedButton(
+                onClick = {
+                    publicKey?.let {
+                        clipboardManager.setText(AnnotatedString(it))
+                        onExported()
+                    }
+                },
+                enabled = publicKey != null,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Copy")
+            }
+            OutlinedButton(
+                onClick = {
+                    publicKey?.let {
+                        onExported()
+                        // Hand off to the system share sheet; the OS lists whatever
+                        // installed apps accept text.
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, "Highmark SSH public key")
+                            putExtra(Intent.EXTRA_TEXT, it)
+                        }
+                        context.startActivity(Intent.createChooser(send, "Share public key"))
+                    }
+                },
+                enabled = publicKey != null,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Share")
+            }
+            OutlinedButton(
+                onClick = onRegenerate,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Regen")
+            }
+        }
+        Surface(
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            SelectionContainer {
+                Text(
+                    text = publicKey ?: "Generating…",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(8.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun SavedConnectionItem(
     profile: ConnectionProfile,
     onSelect: () -> Unit,
@@ -346,7 +464,13 @@ private fun SavedConnectionItem(
                     profile.displayLabel,
                     style = MaterialTheme.typography.bodyMedium
                 )
-                if (profile.encryptedPassword != null) {
+                if (profile.authMethod == AuthMethod.KEY) {
+                    Text(
+                        "🔑 Key saved",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                } else if (profile.encryptedPassword != null) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically

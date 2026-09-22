@@ -1,13 +1,10 @@
 package com.questterm.ui.screens
 
-import android.app.Activity
 import android.util.Log
-import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.questterm.session.SessionManager
 import com.questterm.ui.components.QuickConnectDialog
@@ -24,15 +21,14 @@ fun TerminalHostScreen(
 ) {
     val tabs by sessionManager.tabs.collectAsState()
     val activeTabId by sessionManager.activeTabId.collectAsState()
+    val activeTab by sessionManager.activeTab.collectAsState()
 
     LaunchedEffect(tabs.size) {
         Log.d("TerminalHostScreen", "Tabs updated: size=${tabs.size}, tabs=$tabs")
     }
     val scope = rememberCoroutineScope()
 
-    val context = LocalContext.current
     var showConnectDialog by remember { mutableStateOf(tabs.isEmpty()) }
-    var keyboardShowing by remember { mutableStateOf(true) }
 
     // Auto-show dialog when no tabs exist
     LaunchedEffect(tabs.isEmpty()) {
@@ -73,19 +69,7 @@ fun TerminalHostScreen(
                     }
                 },
                 onNewTabClick = { showConnectDialog = true },
-                onKeyboardToggle = {
-                    val activity = context as? Activity ?: return@TabBar
-                    val imm = activity.getSystemService(Activity.INPUT_METHOD_SERVICE) as InputMethodManager
-                    val focusedView = activity.currentFocus
-                    if (focusedView != null) {
-                        if (keyboardShowing) {
-                            imm.hideSoftInputFromWindow(focusedView.windowToken, 0)
-                        } else {
-                            imm.showSoftInput(focusedView, InputMethodManager.SHOW_IMPLICIT)
-                        }
-                        keyboardShowing = !keyboardShowing
-                    }
-                },
+                onKeyboardToggle = { activeTab?.viewClient?.toggleKeyboard() },
                 onFontDecrease = { sessionManager.decreaseFontSize() },
                 onFontIncrease = { sessionManager.increaseFontSize() },
             )

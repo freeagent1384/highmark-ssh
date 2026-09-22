@@ -17,7 +17,7 @@ class SshSession(
     private val host: String,
     private val port: Int,
     private val username: String,
-    private val password: String,
+    private val auth: SshAuth,
 ) {
     private var _connection: Connection? = null
     val connection: Connection? get() = _connection
@@ -102,7 +102,10 @@ class SshSession(
         conn.connect(hostKeyVerifier, 30000, 30000)
         Log.d("SshSession", "Connected, authenticating...")
 
-        val authResult = conn.authenticateWithPassword(username, password)
+        val authResult = when (auth) {
+            is SshAuth.Password -> conn.authenticateWithPassword(username, auth.password)
+            is SshAuth.PrivateKey -> conn.authenticateWithPublicKey(username, auth.keyPair)
+        }
         if (!authResult) {
             conn.close()
             throw Exception("Authentication failed")

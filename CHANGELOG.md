@@ -5,6 +5,21 @@ All notable changes to Highmark SSH will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-09-22
+
+### Added
+- SSH public-key authentication (contributed by @freeagent1384, PR #3)
+  - Generates an Ed25519 key on the headset and shows the `ssh-ed25519` line to add to `authorized_keys`
+  - Copy or Share (system share sheet) the public key to install it on the server
+  - Private key is encrypted at rest with the Android Keystore, like saved passwords
+  - A profile keeps its saved key and password independently
+- Paste from the clipboard via the text-selection menu (contributed by @freeagent1384, PR #4)
+
+### Fixed
+- On-screen keyboard not appearing on current Horizon OS builds, from either the ⌨ button or tapping the terminal
+  - The terminal now presents itself as a text field (suggestions off) and requests the keyboard explicitly
+- ⌨ button toggling against stale state instead of the keyboard's real visibility
+
 ## [1.0.2] - 2026-06-24
 
 ### Added
@@ -72,7 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [1.0.3] - 2026-09-22
 
 ### Planned for v1.1.0
 - SSH key authentication (ED25519, RSA, ECDSA)

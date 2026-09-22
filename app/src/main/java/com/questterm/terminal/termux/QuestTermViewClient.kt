@@ -7,6 +7,8 @@ import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import com.termux.view.ITerminalSessionHost
@@ -37,19 +39,40 @@ class QuestTermViewClient(
     override fun onScale(scale: Float): Float = 1.0f
 
     override fun onSingleTapUp(e: MotionEvent) {
+        showKeyboard()
+    }
+
+    /** Focuses the terminal and summons the soft keyboard connected to it. */
+    fun showKeyboard() {
         terminalView?.let { view ->
             view.requestFocus()
             val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             // Restart input to rebuild the InputConnection, then show keyboard
             // This ensures the keyboard always connects directly to the terminal
             imm.restartInput(view)
-            view.post { imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT) }
+            // Explicit request (flags = 0): the Quest keyboard ignores SHOW_IMPLICIT.
+            view.post { imm.showSoftInput(view, 0) }
+        }
+    }
+
+    /** Toggles the soft keyboard based on whether the IME is actually visible. */
+    fun toggleKeyboard() {
+        val view = terminalView ?: return
+        val imeVisible = ViewCompat.getRootWindowInsets(view)
+            ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        if (imeVisible) {
+            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(view.windowToken, 0)
+        } else {
+            showKeyboard()
         }
     }
 
     override fun shouldBackButtonBeMappedToEscape(): Boolean = false
 
-    override fun shouldEnforceCharBasedInput(): Boolean = false
+    // The Quest keyboard refuses to open for TYPE_NULL editors, so present a
+    // plain text field with suggestions off instead.
+    override fun shouldEnforceCharBasedInput(): Boolean = true
 
     override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
 
@@ -94,7 +117,15 @@ class QuestTermViewClient(
         clipboard.setPrimaryClip(ClipData.newPlainText("Highmark SSH", text))
     }
 
-    override fun onPasteTextFromClipboard(session: TerminalSession?) {}
+    override fun onPasteTextFromClipboard(session: TerminalSession?) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clipData = clipboard.primaryClip ?: return
+        if (clipData.itemCount == 0) return
+        val pasteText = clipData.getItemAt(0).coerceToText(context)
+        if (!pasteText.isNullOrEmpty()) {
+            terminalView?.mEmulator?.paste(pasteText.toString())
+        }
+    }
 
     override fun onBell(session: TerminalSession?) {}
 
