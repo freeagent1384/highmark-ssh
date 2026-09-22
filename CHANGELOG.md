@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- SSH public-key authentication (contributed by @freeagent1384, PR #3)
+  - Generates an Ed25519 key on the headset and shows the `ssh-ed25519` line to add to `authorized_keys`
+  - Private key is encrypted at rest with the Android Keystore, like saved passwords
+  - A profile keeps its saved key and password independently
+- Paste from the clipboard via the text-selection menu (contributed by @freeagent1384, PR #4)
+
 ### Fixed
 - On-screen keyboard not appearing on current Horizon OS builds, from either the ⌨ button or tapping the terminal
   - The terminal now presents itself as a text field (suggestions off) and requests the keyboard explicitly
