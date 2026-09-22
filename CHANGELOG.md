@@ -5,6 +5,13 @@ All notable changes to Highmark SSH will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- On-screen keyboard not appearing on current Horizon OS builds, from either the ⌨ button or tapping the terminal
+  - The terminal now presents itself as a text field (suggestions off) and requests the keyboard explicitly
+- ⌨ button toggling against stale state instead of the keyboard's real visibility
+
 ## [1.0.2] - 2026-06-24
 
 ### Added
