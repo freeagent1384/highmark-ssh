@@ -5,7 +5,7 @@ All notable changes to Highmark SSH will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.3] - 2026-09-22
 
 ### Added
 - SSH public-key authentication (contributed by @freeagent1384, PR #3)
@@ -87,7 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [1.0.3] - 2026-09-22
 
 ### Planned for v1.1.0
 - SSH key authentication (ED25519, RSA, ECDSA)
