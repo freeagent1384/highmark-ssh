@@ -80,20 +80,28 @@ class ConnectionHistoryStore @Inject constructor(
             it.host == profile.host && it.port == profile.port && it.username == profile.username
         }
 
-        // Key auth is always persisted (the key was generated specifically to be
-        // installed on the server, so there's no "don't remember" case for it);
-        // password auth is gated by the remember-password toggle.
-        val persistPassword = profile.authMethod == AuthMethod.PASSWORD && rememberPassword
-        val persistKey = profile.authMethod == AuthMethod.KEY
+        // Password and key are stored independently, so connecting with one method
+        // never discards the other. A key in particular may already be installed on
+        // the server and can't be recovered once dropped.
+        //
+        // Password: only a password login updates it, gated by the remember toggle.
+        val encryptedPassword = when {
+            profile.authMethod != AuthMethod.PASSWORD -> existing?.encryptedPassword
+            rememberPassword -> profile.encryptedPassword
+            else -> null
+        }
+        // Key: always persisted once present; kept when the incoming profile has none.
+        val hasNewKey = profile.encryptedPrivateKey != null && profile.publicKeyRaw != null
+        val encryptedPrivateKey = if (hasNewKey) profile.encryptedPrivateKey else existing?.encryptedPrivateKey
+        val publicKeyRaw = if (hasNewKey) profile.publicKeyRaw else existing?.publicKeyRaw
 
         // Base on the existing profile when updating (preserves id/favorite status),
-        // otherwise on the freshly-built profile. Auth fields always come from the
-        // incoming profile so switching auth methods clears out the stale one.
+        // otherwise on the freshly-built profile.
         val toSave = (existing ?: profile).copy(
             authMethod = profile.authMethod,
-            encryptedPassword = if (persistPassword) profile.encryptedPassword else null,
-            encryptedPrivateKey = if (persistKey) profile.encryptedPrivateKey else null,
-            publicKeyRaw = if (persistKey) profile.publicKeyRaw else null,
+            encryptedPassword = encryptedPassword,
+            encryptedPrivateKey = encryptedPrivateKey,
+            publicKeyRaw = publicKeyRaw,
             lastUsedTimestamp = System.currentTimeMillis(),
         )
 

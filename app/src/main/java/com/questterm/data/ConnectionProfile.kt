@@ -27,8 +27,6 @@ data class ConnectionProfile(
         copy(
             authMethod = AuthMethod.PASSWORD,
             encryptedPassword = CredentialEncryption.encrypt(password),
-            encryptedPrivateKey = null,
-            publicKeyRaw = null,
         )
 
     fun getDecryptedPassword(): String? =
@@ -38,7 +36,6 @@ data class ConnectionProfile(
     fun withGeneratedKey(keyPair: KeyPair): ConnectionProfile =
         copy(
             authMethod = AuthMethod.KEY,
-            encryptedPassword = null,
             encryptedPrivateKey = CredentialEncryption.encrypt(SshKeyPairs.encodePrivateKey(keyPair)),
             publicKeyRaw = SshKeyPairs.encodePublicKeyRaw(keyPair.public as Ed25519PublicKey),
         )
