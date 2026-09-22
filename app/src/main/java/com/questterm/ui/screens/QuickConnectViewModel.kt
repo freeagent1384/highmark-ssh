@@ -71,6 +71,22 @@ class QuickConnectViewModel @Inject constructor(
      *  since KeyPair isn't a plain data value; kept alongside it here instead. */
     private var pendingKeyPair: KeyPair? = null
 
+    /** The host/port/username [pendingKeyPair] belongs to; a key is per-connection. */
+    private var pendingKeyTarget: KeyTarget? = null
+
+    private data class KeyTarget(val host: String, val port: Int, val username: String)
+
+    private fun currentTarget(): KeyTarget {
+        val state = _uiState.value
+        return KeyTarget(state.host, state.port.toIntOrNull() ?: 22, state.username)
+    }
+
+    private fun setPendingKey(keyPair: KeyPair?, publicKey: String?) {
+        pendingKeyPair = keyPair
+        pendingKeyTarget = keyPair?.let { currentTarget() }
+        _uiState.update { it.copy(generatedPublicKey = publicKey) }
+    }
+
     private val knownHosts: KnownHostsStore
         get() = sshConnectionManager.knownHostsStore
 
@@ -130,14 +146,51 @@ class QuickConnectViewModel @Inject constructor(
         }
 
         _uiState.value = _uiState.value.copy(host = host, username = username, port = port)
+        onTargetChanged()
     }
 
     fun updatePort(value: String) {
         _uiState.value = _uiState.value.copy(port = value)
+        onTargetChanged()
     }
 
     fun updateUsername(value: String) {
         _uiState.value = _uiState.value.copy(username = value)
+        onTargetChanged()
+    }
+
+    /** Drops a key that belonged to a different host/port/username. */
+    private fun onTargetChanged() {
+        if (pendingKeyTarget == currentTarget()) return
+        if (_uiState.value.authMethod == AuthMethod.KEY) {
+            resolveKeyForTarget()
+        } else {
+            setPendingKey(null, null)
+        }
+    }
+
+    /**
+     * Shows the key saved for the current host/port/username, or a fresh unsaved
+     * one. Reusing matters: generating over a saved key would replace the key
+     * already installed on the server.
+     */
+    private fun resolveKeyForTarget() {
+        val saved = findSavedProfile()
+        val savedKey = saved?.getKeyPair()
+        if (savedKey != null) {
+            setPendingKey(savedKey, saved.getOpenSshPublicKey())
+        } else {
+            // Not saved yet: the host may still be half-typed. It's saved when the
+            // user copies it, regenerates, or connects.
+            val keyPair = SshKeyPairs.generate()
+            setPendingKey(keyPair, formatPublicKey(keyPair))
+        }
+    }
+
+    private fun formatPublicKey(keyPair: KeyPair): String? {
+        val state = _uiState.value
+        val comment = state.username.ifBlank { "quest" } + "@" + state.host.ifBlank { "highmark-ssh" }
+        return SshKeyPairs.formatOpenSsh(keyPair.public as Ed25519PublicKey, comment)
     }
 
     fun updatePassword(value: String) {
@@ -150,30 +203,25 @@ class QuickConnectViewModel @Inject constructor(
 
     fun selectAuthMethod(method: AuthMethod) {
         _uiState.update { it.copy(authMethod = method) }
-        if (method == AuthMethod.KEY && pendingKeyPair == null) {
-            // Reuse a key already saved for this host/user rather than generating a
-            // new one, which would overwrite the key installed on the server.
-            val saved = findSavedProfile()?.takeIf { it.getKeyPair() != null }
-            if (saved != null) {
-                pendingKeyPair = saved.getKeyPair()
-                _uiState.update { it.copy(generatedPublicKey = saved.getOpenSshPublicKey()) }
-            } else {
-                regenerateKey()
-            }
+        if (method == AuthMethod.KEY && (pendingKeyPair == null || pendingKeyTarget != currentTarget())) {
+            resolveKeyForTarget()
         }
     }
 
-    /** Generates a fresh on-device ed25519 keypair and shows its public half for export. */
+    /** Explicitly replaces this connection's key with a fresh one, and saves it. */
     fun regenerateKey() {
         val keyPair = SshKeyPairs.generate()
-        pendingKeyPair = keyPair
-        val state = _uiState.value
-        val comment = state.username.ifBlank { "quest" } + "@" + state.host.ifBlank { "highmark-ssh" }
-        val openSsh = SshKeyPairs.formatOpenSsh(keyPair.public as Ed25519PublicKey, comment)
-        _uiState.update { it.copy(authMethod = AuthMethod.KEY, generatedPublicKey = openSsh) }
-        // Persist right away: the user is about to install this key on the server,
-        // and it must survive the dialog closing or the app restarting meanwhile.
+        setPendingKey(keyPair, formatPublicKey(keyPair))
         saveKeyProfile(keyPair)
+    }
+
+    /**
+     * Called when the user copies the public key to install it on the server.
+     * Save now so the key survives the dialog closing or the app restarting
+     * while they do that.
+     */
+    fun onPublicKeyCopied() {
+        pendingKeyPair?.let { saveKeyProfile(it) }
     }
 
     private fun findSavedProfile(): ConnectionProfile? {
@@ -200,7 +248,7 @@ class QuickConnectViewModel @Inject constructor(
     fun selectProfile(profile: ConnectionProfile) {
         // Load both credentials; the profile keeps each independently, so the user
         // can switch methods without losing either.
-        pendingKeyPair = profile.getKeyPair()
+        val profileKey = profile.getKeyPair()
         _uiState.update {
             it.copy(
                 host = profile.host,
@@ -211,9 +259,12 @@ class QuickConnectViewModel @Inject constructor(
                 authMethod = profile.authMethod,
                 // Only show the public key if its private half actually decrypted
                 // (e.g. not after a Keystore reset), so the UI matches what connect() can use.
-                generatedPublicKey = if (pendingKeyPair != null) profile.getOpenSshPublicKey() else null,
+                generatedPublicKey = if (profileKey != null) profile.getOpenSshPublicKey() else null,
             )
         }
+        // Set after the fields above so the key is bound to this profile's target.
+        pendingKeyPair = profileKey
+        pendingKeyTarget = profileKey?.let { currentTarget() }
     }
 
     fun toggleFavorite(profileId: String) {

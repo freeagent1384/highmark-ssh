@@ -212,6 +212,7 @@ fun QuickConnectDialog(
                     GeneratedKeyPanel(
                         publicKey = uiState.generatedPublicKey,
                         onRegenerate = viewModel::regenerateKey,
+                        onCopied = viewModel::onPublicKeyCopied,
                     )
                 }
 
@@ -358,6 +359,7 @@ private fun HostKeyDialog(
 private fun GeneratedKeyPanel(
     publicKey: String?,
     onRegenerate: () -> Unit,
+    onCopied: () -> Unit,
 ) {
     val clipboardManager = LocalClipboardManager.current
     Column(
@@ -387,7 +389,12 @@ private fun GeneratedKeyPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             OutlinedButton(
-                onClick = { publicKey?.let { clipboardManager.setText(AnnotatedString(it)) } },
+                onClick = {
+                    publicKey?.let {
+                        clipboardManager.setText(AnnotatedString(it))
+                        onCopied()
+                    }
+                },
                 enabled = publicKey != null,
                 modifier = Modifier.weight(1f),
             ) {
